@@ -49,8 +49,8 @@ def sssp(
     if _bmssp is None:
         raise RuntimeError("_bmssp module not available. Build with 'maturin develop'")
     
-    # Validate inputs
-    weights = np.asarray(weights, dtype=np.float32)
+    # Validate inputs (preserve dtype)
+    weights = np.asarray(weights)
     if len(weights) != graph.num_edges():
         raise ValueError(
             f"Weights length {len(weights)} != graph edges {graph.num_edges()}"

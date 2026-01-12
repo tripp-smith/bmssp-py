@@ -1,47 +1,32 @@
 # Performance Guide
 
-## When to Use BMSSP
+## Overview
 
-BMSSP is designed for scenarios where you need to:
-- Compute many SSSP calls on the same graph structure
-- Handle dynamic weights (weights change frequently)
-- Simulate outages and scenarios
-- Work with large sparse graphs (hundreds of thousands to millions of edges)
+BMSSP is designed for fast single-source shortest path computation on large sparse graphs, especially when many SSSP calls are needed (scenario analysis, repeated queries, etc.).
 
 ## Performance Characteristics
 
-### Current Implementation
+### When BMSSP Excels
 
-The current implementation uses Dijkstra's algorithm as a baseline. Full BMSSP algorithm implementation is in progress.
+- **Large sparse graphs**: Hundreds of thousands to millions of edges
+- **Repeated calls**: Many SSSP computations with different sources or scenarios
+- **Dynamic weights**: Frequent weight updates without topology changes
+- **Outage simulation**: Fast re-routing after edge failures
 
-**Dijkstra Baseline:**
-- Time complexity: O(m log n) where m = edges, n = vertices
-- Space complexity: O(n + m)
-- Good for: Small to medium graphs, single SSSP calls
+### When to Use Alternatives
 
-### Expected BMSSP Performance
+- **Small graphs** (< 1000 vertices): Dijkstra may be faster due to lower overhead
+- **Single SSSP call**: Dijkstra is simpler and often faster
+- **Dense graphs**: Other algorithms may be more appropriate
+- **Negative weights**: BMSSP does not support negative weights (use Bellman-Ford)
 
-**BMSSP (when fully implemented):**
-- Time complexity: O(m + n log n) expected
-- Space complexity: O(n + m)
-- Good for: Large sparse graphs, repeated SSSP calls
+## Benchmarking
 
-## Optimization Tips
+The package includes benchmarks in:
+- `rust/bmssp-core/benches/` - Rust-level benchmarks using criterion
+- `python/benchmarks/` - Python-level benchmarks using pytest-benchmark
 
-1. **Use CSR format directly**: If you have CSR arrays, use `Graph.from_csr()` to avoid edge list conversion overhead
-
-2. **Reuse graphs**: Graph topology is immutable - create once, reuse for multiple SSSP calls with different weights
-
-3. **Use enabled masks for outages**: Instead of modifying weights, use the `enabled` parameter for faster outage simulation
-
-4. **Choose appropriate precision**: Use `f32` when precision is sufficient, `f64` when higher precision is needed
-
-5. **Batch operations**: When running multiple scenarios, reuse the graph object
-
-## Benchmarks
-
-Run benchmarks with:
-
+Run benchmarks:
 ```bash
 # Rust benchmarks
 cd rust/bmssp-core
@@ -49,13 +34,30 @@ cargo bench
 
 # Python benchmarks
 cd python
-pytest benchmarks/ -v
+pytest benchmarks/ --benchmark-only
 ```
+
+## Optimization Tips
+
+1. **Use CSR format**: Building graphs from CSR is faster than edge lists
+2. **Reuse graphs**: Graph topology is immutable - build once, reuse for many SSSP calls
+3. **Update weights in-place**: Modify weight arrays rather than rebuilding graphs
+4. **Use enabled masks**: For outages, use enabled masks rather than rebuilding topology
+5. **Choose appropriate precision**: Use f32 for speed, f64 for precision
 
 ## Memory Usage
 
-- Graph storage: O(n + m) for CSR format
-- SSSP computation: O(n) for distances and predecessors
-- Total: O(n + m) space
+- Graph structure: O(m + n) space
+- SSSP computation: O(n) additional space for distances and predecessors
+- Enabled masks: O(m) space
 
-For graphs with millions of edges, memory usage is primarily determined by the graph structure itself.
+## Scaling Behavior
+
+Expected performance scales as:
+- Time: O(m + n log n) expected for sparse graphs
+- Space: O(m + n)
+
+For very large graphs, consider:
+- Graph partitioning
+- Approximate algorithms for exploratory analysis
+- Batch processing of multiple SSSP calls
