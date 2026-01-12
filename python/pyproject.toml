@@ -1,0 +1,50 @@
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "bmssp"
+version = "0.1.0"
+description = "Fast single-source shortest paths for grid and pipeline networks using BMSSP algorithm"
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [
+    {name = "bmssp contributors"}
+]
+license = {text = "MIT OR Apache-2.0"}
+keywords = ["graph", "shortest-path", "sssp", "bmssp", "algorithm"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Rust",
+    "Topic :: Scientific/Engineering",
+]
+dependencies = [
+    "numpy>=2.0.0,<3.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-benchmark>=4.0.0",
+    "scipy>=1.13.0",
+    "networkx>=3.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/yourusername/bmssp-py"
+Repository = "https://github.com/yourusername/bmssp-py"
+Documentation = "https://github.com/yourusername/bmssp-py#readme"
+
+[tool.maturin]
+module-name = "_bmssp"
+bindings = "pyo3"
+compatibility = "linux"
+python-source = "."
