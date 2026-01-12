@@ -8,7 +8,7 @@ A Python package providing fast single-source shortest path (SSSP) computation u
 
 ## Features
 
-- Fast SSSP computation using BMSSP algorithm (currently using Dijkstra baseline)
+- Fast SSSP computation using BMSSP algorithm
 - Optimized for large sparse graphs (hundreds of thousands to millions of edges)
 - Support for dynamic weights and edge outages
 - Clean Python API with NumPy integration
@@ -28,8 +28,6 @@ brew install rust  # or use rustup
 cd bmssp-py/python
 maturin develop
 ```
-
-See `INSTALL.md` for detailed setup instructions.
 
 ## Quick Start
 
@@ -65,12 +63,15 @@ See `python/examples/grid_pipeline.py` for a complete example demonstrating:
 
 ## Development
 
-See `INSTALL.md` for development setup instructions.
+For development setup, install the Rust toolchain and use `maturin develop` from the `python/` directory.
+
+## Citation
+
+If you use this implementation in your research, please cite the original paper:
+
+> Ran Duan, Jiayi Mao, Xiao Mao, Xinkai Shu, Longhui Yin. "Breaking the Sorting Barrier for Directed Single-Source Shortest Paths." *arXiv preprint arXiv:2504.17033* (2025).  
+> [https://arxiv.org/abs/2504.17033](https://arxiv.org/abs/2504.17033)
 
 ## License
 
-Licensed under either of:
-- Apache License, Version 2.0 (LICENSE-APACHE)
-- MIT License (LICENSE-MIT)
-
-at your option.
+Licensed under the MIT License. See [LICENSE](LICENSE) for details.

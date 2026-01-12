@@ -11,18 +11,18 @@ requires-python = ">=3.9"
 authors = [
     {name = "bmssp contributors"}
 ]
-license = {text = "MIT OR Apache-2.0"}
+license = {text = "MIT"}
 keywords = ["graph", "shortest-path", "sssp", "bmssp", "algorithm"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: MIT License",
-    "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "Programming Language :: Rust",
     "Topic :: Scientific/Engineering",
 ]
@@ -46,5 +46,4 @@ Documentation = "https://github.com/yourusername/bmssp-py#readme"
 [tool.maturin]
 module-name = "_bmssp"
 bindings = "pyo3"
-compatibility = "linux"
 python-source = "."
