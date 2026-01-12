@@ -1,0 +1,19 @@
+[package]
+name = "bmssp-py"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[lib]
+name = "_bmssp"
+crate-type = ["cdylib"]
+
+[dependencies]
+bmssp-core = { path = "../bmssp-core" }
+pyo3 = { version = "0.22", features = ["extension-module", "abi3-py38"] }
+numpy = { version = "0.22", features = ["numpy-ndarray"] }
+
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"

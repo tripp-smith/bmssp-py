@@ -1,0 +1,12 @@
+[workspace]
+members = ["bmssp-core", "bmssp-py"]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["bmssp contributors"]
+license = "MIT OR Apache-2.0"
+
+[workspace.dependencies]
+# Add common dependencies here if needed
