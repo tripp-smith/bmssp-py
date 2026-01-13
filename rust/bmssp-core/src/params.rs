@@ -16,23 +16,36 @@ impl BmsspParams {
     /// Compute BMSSP parameters from graph size
     ///
     /// Parameters are based on logarithmic factors of n.
-    /// Exact formulas should match reference implementations.
+    /// 
+    /// - `t`: Threshold for pivot selection (tree size threshold)
+    /// - `k`: Block size for processing vertices
+    /// - `l`: Level parameter for recursion control
+    /// 
+    /// For small graphs, we use minimal values. For larger graphs,
+    /// parameters scale logarithmically to control recursion depth
+    /// and block processing size.
     pub fn from_n(n: usize) -> Self {
         if n == 0 {
             return Self { t: 0, k: 0, l: 0 };
         }
         
-        // Base parameters on log factors
-        // These are simplified - actual implementation should match reference
-        let log_n = (n as f64).ln().max(1.0);
-        let t = (log_n * 2.0).ceil() as usize;
-        let k = (log_n * 1.5).ceil() as usize;
-        let l = (log_n * 1.2).ceil() as usize;
+        if n <= 4 {
+            // Very small graphs: use minimal parameters
+            return Self { t: 2, k: 2, l: 1 };
+        }
         
-        // Ensure minimum values
+        let log_n = (n as f64).ln().max(1.0);
+        // t: threshold for pivot selection (log²(n) scaling)
+        let t = ((log_n * log_n) / 4.0).ceil().max(2.0) as usize;
+        // k: block size (log(n) vertices per block)
+        let k = (log_n * 1.5).ceil().max(2.0) as usize;
+        // l: level parameter for recursion control
+        let l = (log_n * 0.8).ceil().max(1.0) as usize;
+        
+        // Ensure reasonable bounds
         Self {
-            t: t.max(2),
-            k: k.max(2),
+            t: t.max(2).min(n / 2),  // t should be at most n/2
+            k: k.max(2).min(n),       // k should be at most n
             l: l.max(1),
         }
     }

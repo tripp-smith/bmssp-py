@@ -32,7 +32,11 @@ def test_graph_from_edges_with_weights():
     graph, result_weights = Graph.from_edges(n, edges, weights=weights)
     assert graph.num_vertices() == 3
     assert graph.num_edges() == 3
-    np.testing.assert_array_equal(result_weights, weights)
+    # Weights are reordered to match CSR format (sorted by source vertex)
+    # Input: [[0,1], [1,2], [0,2]] with weights [1.0, 2.0, 1.5]
+    # CSR: [[0,1], [0,2], [1,2]] with weights [1.0, 1.5, 2.0]
+    expected_weights = np.array([1.0, 1.5, 2.0], dtype=np.float32)
+    np.testing.assert_array_equal(result_weights, expected_weights)
 
 
 def test_graph_validation():

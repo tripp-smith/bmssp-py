@@ -1,8 +1,44 @@
 use std::collections::BinaryHeap;
-use std::cmp::Reverse;
+use std::cmp::{Ordering, Reverse};
 use crate::csr::CsrGraph;
 use crate::error::Result;
 use num_traits::Float;
+
+/// Wrapper type to make floats orderable for use in BinaryHeap
+/// Treats NaN as greater than all other values
+#[derive(Clone, Copy, Debug)]
+struct OrderedFloat<T>(T);
+
+impl<T: Float> PartialEq for OrderedFloat<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+
+impl<T: Float> Eq for OrderedFloat<T> {}
+
+impl<T: Float> PartialOrd for OrderedFloat<T> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl<T: Float> Ord for OrderedFloat<T> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.0.partial_cmp(&other.0).unwrap_or_else(|| {
+            // Handle NaN: treat as greater than everything
+            if self.0.is_nan() {
+                if other.0.is_nan() {
+                    Ordering::Equal
+                } else {
+                    Ordering::Greater
+                }
+            } else {
+                Ordering::Less
+            }
+        })
+    }
+}
 
 /// Run Dijkstra's algorithm to compute single-source shortest paths
 ///
@@ -49,11 +85,11 @@ where
     pred[source] = source; // Source's predecessor is itself
 
     // Priority queue: (distance, vertex)
-    // Use Reverse for min-heap behavior
+    // Use Reverse for min-heap behavior, with OrderedFloat wrapper
     let mut heap = BinaryHeap::new();
-    heap.push(Reverse((T::zero(), source)));
+    heap.push(Reverse((OrderedFloat(T::zero()), source)));
 
-    while let Some(Reverse((d, u))) = heap.pop() {
+    while let Some(Reverse((OrderedFloat(d), u))) = heap.pop() {
         // Skip if we've found a better path to u
         if d > dist[u] {
             continue;
@@ -76,7 +112,7 @@ where
             if new_dist < dist[v] {
                 dist[v] = new_dist;
                 pred[v] = u;
-                heap.push(Reverse((new_dist, v)));
+                heap.push(Reverse((OrderedFloat(new_dist), v)));
             }
         }
     }

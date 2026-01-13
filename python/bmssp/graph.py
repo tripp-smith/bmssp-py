@@ -99,10 +99,10 @@ class Graph:
             edge_keys = u * n + v  # Unique key for each (u, v) pair
             
             if dedupe == "min":
-            if weights is None:
-                weights = np.ones(m, dtype=np.float32)
-            else:
-                weights = np.asarray(weights, dtype=np.float32)
+                if weights is None:
+                    weights = np.ones(m, dtype=np.float32)
+                else:
+                    weights = np.asarray(weights, dtype=np.float32)
             
             # Sort by key, then by weight (ascending)
             sort_idx = np.lexsort((weights, edge_keys))

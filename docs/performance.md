@@ -24,6 +24,8 @@ BMSSP is designed for fast single-source shortest path computation on large spar
 
 The package includes benchmarks in:
 - `rust/bmssp-core/benches/` - Rust-level benchmarks using criterion
+  - `dijkstra_vs_bmssp` - Comparison of BMSSP vs Dijkstra algorithms
+  - `block_heap_bench` - Comparison of heap implementations (BTreeSet vs BinaryHeap)
 - `python/benchmarks/` - Python-level benchmarks using pytest-benchmark
 
 Run benchmarks:
@@ -32,10 +34,22 @@ Run benchmarks:
 cd rust/bmssp-core
 cargo bench
 
+# Specific benchmark
+cargo bench --bench dijkstra_vs_bmssp
+cargo bench --bench block_heap_bench
+
 # Python benchmarks
 cd python
 pytest benchmarks/ --benchmark-only
 ```
+
+## Performance Improvements
+
+Recent optimizations (Milestone 4) include:
+
+1. **Fast BlockHeap**: Replaced BTreeSet-based heap with BinaryHeap-based implementation using stale entry tracking, providing better performance for decrease-key operations
+2. **State Reuse API**: Added `BmsspState` for buffer reuse across multiple SSSP calls, reducing allocations for repeated computations
+3. **API-level fast paths**: Use `bmssp_sssp` (without predecessors) when predecessor tracking isn't needed
 
 ## Optimization Tips
 
@@ -44,6 +58,37 @@ pytest benchmarks/ --benchmark-only
 3. **Update weights in-place**: Modify weight arrays rather than rebuilding graphs
 4. **Use enabled masks**: For outages, use enabled masks rather than rebuilding topology
 5. **Choose appropriate precision**: Use f32 for speed, f64 for precision
+6. **Use state reuse for repeated calls**: For performance-critical scenarios with many SSSP calls, use `BmsspState` to avoid allocations between calls (see State Reuse API below)
+
+## State Reuse API
+
+For scenarios with many repeated SSSP calls (e.g., scenario analysis, repeated queries), use the state-based API to avoid allocations:
+
+```rust
+use bmssp_core::{BmsspState, bmssp_sssp_with_state, CsrGraph};
+
+// Create reusable state (sized for largest graph you'll use)
+let mut state = BmsspState::new(max_vertices);
+
+// Reuse state across multiple calls
+for source in sources {
+    let distances = bmssp_sssp_with_state(&mut state, &graph, &weights, source, None)?;
+    // Process distances...
+}
+```
+
+The state-based API (`bmssp_sssp_with_state` and `bmssp_sssp_with_preds_and_state`) reuses internal buffers, reducing allocation overhead for repeated calls.
+
+## Feature Flags
+
+The crate supports optional feature flags for compilation-time customization:
+
+- **Default features**: `["f32", "f64"]` - Supports both f32 and f64 (default)
+- **f32-only / f64-only**: Placeholder flags (code uses generics, so compile-time specialization is limited)
+- **no-predecessors**: Placeholder flag (predecessor tracking is optional at API level: use `bmssp_sssp` instead of `bmssp_sssp_with_preds`)
+- **fast-math**: Placeholder flag (would enable compiler fast-math optimizations, requires build configuration)
+
+Note: Due to the generic design of the codebase, most feature flags provide API-level optimizations rather than compile-time code elimination. Use the appropriate API functions (`bmssp_sssp` vs `bmssp_sssp_with_preds`) to avoid unnecessary computations.
 
 ## Memory Usage
 

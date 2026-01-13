@@ -34,7 +34,7 @@ def test_parity_small_graph():
     col = edges[:, 1]
     data = weights
     csr = csr_matrix((data, (row, col)), shape=(n, n))
-    dist_scipy, _ = dijkstra(csgraph=csr, directed=True, indices=0, return_predecessors=False)
+    dist_scipy = dijkstra(csgraph=csr, directed=True, indices=0, return_predecessors=False)
     
     # Compare distances (within floating point tolerance)
     np.testing.assert_allclose(result.dist, dist_scipy, rtol=1e-6, atol=1e-6)
@@ -63,6 +63,6 @@ def test_parity_grid_graph():
     col = edges[:, 1]
     data = weights
     csr = csr_matrix((data, (row, col)), shape=(n, n))
-    dist_scipy, _ = dijkstra(csgraph=csr, directed=True, indices=0, return_predecessors=False)
+    dist_scipy = dijkstra(csgraph=csr, directed=True, indices=0, return_predecessors=False)
     
     np.testing.assert_allclose(result.dist, dist_scipy, rtol=1e-6, atol=1e-6)

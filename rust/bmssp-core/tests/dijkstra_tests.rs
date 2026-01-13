@@ -32,10 +32,10 @@ fn test_small_grid() {
     // |    |
     // v    v
     // 2 -> 3
-    let indptr = vec![0, 2, 4, 5, 6];
-    let indices = vec![1, 2, 3, 3, 3];
+    let indptr = vec![0, 2, 3, 4, 4];
+    let indices = vec![1, 2, 3, 3];
     let graph = CsrGraph::new(4, indptr, indices).unwrap();
-    let weights = vec![1.0f32, 1.0f32, 1.0f32, 1.0f32, 1.0f32];
+    let weights = vec![1.0f32, 1.0f32, 1.0f32, 1.0f32];
     let dist = dijkstra_sssp(&graph, &weights, 0, None).unwrap();
     assert_eq!(dist[0], 0.0);
     assert_eq!(dist[1], 1.0);

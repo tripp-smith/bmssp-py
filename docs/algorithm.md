@@ -6,7 +6,7 @@ BMSSP (Blocked Multi-Source Shortest Path) is an algorithm for computing single-
 
 ## Current Implementation Status
 
-**Note**: The current implementation uses Dijkstra's algorithm as a baseline. The full BMSSP algorithm implementation is in progress.
+**Milestone 2 Complete**: The BMSSP algorithm is now implemented using a block-based approach. The implementation processes vertices in blocks using a BlockHeap structure, matching Dijkstra's correctness while using the block-processing structure of BMSSP.
 
 ## Algorithm Structure
 
