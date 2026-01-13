@@ -39,9 +39,9 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/yourusername/bmssp-py"
-Repository = "https://github.com/yourusername/bmssp-py"
-Documentation = "https://github.com/yourusername/bmssp-py#readme"
+Homepage = "https://github.com/tripp-smith/bmssp-py"
+Repository = "https://github.com/tripp-smith/bmssp-py"
+Documentation = "https://github.com/tripp-smith/bmssp-py#readme"
 
 [tool.maturin]
 module-name = "_bmssp"
