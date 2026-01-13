@@ -1,36 +1,42 @@
 #!/bin/bash
 # Build wheels for the current platform
-# Usage: ./scripts/build-wheels.sh
+# This script builds wheels using maturin for local testing
 
 set -euo pipefail
 
+# Get script directory (project root)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-cd "$PROJECT_ROOT"
+cd "$SCRIPT_DIR"
 
 echo "Building wheels for bmssp..."
+echo ""
 
 # Check prerequisites
-if ! command -v maturin &> /dev/null; then
-    echo "Error: maturin not found. Install with: pip install maturin"
-    exit 1
-fi
-
 if ! command -v cargo &> /dev/null; then
-    echo "Error: cargo not found. Install Rust toolchain first."
+    echo "Error: Cargo not found. Please install Rust toolchain."
     exit 1
 fi
 
-# Create dist directory
-DIST_DIR="$PROJECT_ROOT/python/dist"
-mkdir -p "$DIST_DIR"
+if ! command -v maturin &> /dev/null; then
+    echo "Error: Maturin not found. Please install maturin:"
+    echo "  pip install maturin"
+    exit 1
+fi
+
+# Change to python directory
+cd python
+
+# Create dist directory if it doesn't exist
+mkdir -p dist
 
 # Build wheel
-echo "Building wheel..."
-cd "$PROJECT_ROOT/python"
-maturin build --release --out "$DIST_DIR"
+echo "Building wheel with maturin..."
+maturin build --release --out dist
 
 echo ""
-echo "Wheels built successfully!"
-echo "Output directory: $DIST_DIR"
-ls -lh "$DIST_DIR"/*.whl 2>/dev/null || echo "No .whl files found (check for errors above)"
+echo "✅ Wheel built successfully!"
+echo "Wheels are in: $(pwd)/dist"
+echo ""
+echo "To test the wheel:"
+echo "  pip install dist/bmssp-*.whl"
+echo "  python -c 'import bmssp; print(bmssp.__version__)'"
