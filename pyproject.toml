@@ -46,4 +46,5 @@ Documentation = "https://github.com/tripp-smith/bmssp-py#readme"
 [tool.maturin]
 module-name = "_bmssp"
 bindings = "pyo3"
-python-source = "."
+python-source = "python"
+manifest-path = "rust/bmssp-py/Cargo.toml"
