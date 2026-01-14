@@ -1,10 +1,14 @@
 # BMSSP: Fast Single-Source Shortest Paths
 
+![Tests](https://github.com/tripp-smith/bmssp-py/workflows/Tests/badge.svg)
+![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
+![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)
+
 A Python package providing fast single-source shortest path (SSSP) computation using the BMSSP algorithm, with a high-performance Rust backend.
 
 ## Status
 
-🚧 **Under Development** - This package is currently being implemented.
+**Beta (v0.1.0)** - This package is ready for use. The API is stable, but we welcome feedback and contributions.
 
 ## Features
 
@@ -18,7 +22,9 @@ A Python package providing fast single-source shortest path (SSSP) computation u
 
 ## Installation
 
-**Note**: This package is not yet available on PyPI. For development installation:
+**Note**: This package is not yet available on PyPI. For detailed installation instructions, see the [Installation Guide](docs/installation.md).
+
+### Quick Installation
 
 ```bash
 # Install Rust toolchain first
@@ -53,6 +59,15 @@ path = reconstruct_path(result.pred, target=3)
 print(f"Path: {path}")
 ```
 
+## Performance Highlights
+
+- **Optimized for large sparse graphs**: Handles hundreds of thousands to millions of edges efficiently
+- **Fast repeated computations**: Ideal for scenario analysis with many SSSP calls
+- **Dynamic weight updates**: Update weights without rebuilding graph topology
+- **Rust backend**: High-performance implementation with minimal Python overhead
+
+For detailed performance information, see the [Performance Guide](docs/performance.md).
+
 ## Example: Grid Network Optimization
 
 See `python/examples/grid_pipeline.py` for a complete example demonstrating:
@@ -60,6 +75,14 @@ See `python/examples/grid_pipeline.py` for a complete example demonstrating:
 - Applying load flows and congestion models
 - Handling outages
 - Recomputing paths
+
+## Documentation
+
+- [Installation Guide](docs/installation.md) - Detailed installation instructions
+- [Tutorial](docs/tutorial.md) - Step-by-step guide with examples
+- [API Reference](docs/api.md) - Complete API documentation
+- [Performance Guide](docs/performance.md) - Performance characteristics and optimization tips
+- [Algorithm Description](docs/algorithm.md) - BMSSP algorithm overview
 
 ## Development
 
