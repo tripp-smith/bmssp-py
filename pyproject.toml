@@ -48,3 +48,4 @@ module-name = "_bmssp"
 bindings = "pyo3"
 python-source = "python"
 manifest-path = "rust/bmssp-py/Cargo.toml"
+include = ["LICENSE"]
