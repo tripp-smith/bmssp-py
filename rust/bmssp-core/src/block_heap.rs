@@ -1,6 +1,20 @@
-use std::collections::{BTreeSet, HashMap, BinaryHeap};
+use std::collections::{BinaryHeap, HashMap};
 use num_traits::Float;
 use crate::ordered_float::OrderedFloat;
+
+const DEFAULT_BLOCK_BYTES: usize = 4096;
+
+#[derive(Debug)]
+struct Block<T> {
+    entries: Vec<(OrderedFloat<T>, usize)>,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct EntryInfo<T> {
+    distance: T,
+    block_index: usize,
+    entry_index: usize,
+}
 
 /// Block heap / frontier structure for BMSSP
 ///
@@ -9,10 +23,12 @@ use crate::ordered_float::OrderedFloat;
 /// - Decrease-key operations
 /// - Tracking the next distance threshold (b_next)
 pub struct BlockHeap<T> {
-    /// Set of (distance, vertex) pairs, ordered by distance
-    heap: BTreeSet<(OrderedFloat<T>, usize)>,
-    /// Map from vertex to current distance (for decrease-key)
-    distances: HashMap<usize, T>,
+    /// Cache-friendly blocks of sorted (distance, vertex) pairs
+    blocks: Vec<Block<T>>,
+    /// Tuned block capacity (roughly L1-cache sized)
+    block_capacity: usize,
+    /// Map from vertex to its current distance and location
+    locations: HashMap<usize, EntryInfo<T>>,
 }
 
 impl<T> BlockHeap<T>
@@ -21,33 +37,33 @@ where
 {
     /// Create a new empty block heap
     pub fn new() -> Self {
+        let entry_size = std::mem::size_of::<(OrderedFloat<T>, usize)>();
+        let mut block_capacity = DEFAULT_BLOCK_BYTES / entry_size.max(1);
+        if block_capacity == 0 {
+            block_capacity = 1;
+        }
         Self {
-            heap: BTreeSet::new(),
-            distances: HashMap::new(),
+            blocks: Vec::new(),
+            block_capacity,
+            locations: HashMap::new(),
         }
     }
 
     /// Add or update a vertex with a distance
     pub fn push(&mut self, vertex: usize, distance: T) {
-        // Remove old entry if exists
-        if let Some(&old_dist) = self.distances.get(&vertex) {
-            self.heap.remove(&(OrderedFloat(old_dist), vertex));
-        }
-        
-        // Insert new entry
-        self.heap.insert((OrderedFloat(distance), vertex));
-        self.distances.insert(vertex, distance);
+        self.remove_vertex(vertex);
+        self.insert_vertex(vertex, distance);
     }
 
     /// Decrease the distance for a vertex (if new distance is smaller)
     pub fn decrease_key(&mut self, vertex: usize, new_distance: T) {
-        if let Some(&old_distance) = self.distances.get(&vertex) {
-            if new_distance < old_distance {
+        if let Some(info) = self.locations.get(&vertex) {
+            if new_distance < info.distance {
                 self.push(vertex, new_distance);
             }
-        } else {
-            self.push(vertex, new_distance);
+            return;
         }
+        self.push(vertex, new_distance);
     }
 
     /// Pop a block of up to `max_size` vertices with smallest distances
@@ -56,31 +72,140 @@ where
     /// Also returns the next distance threshold (b_next) if heap is not empty.
     pub fn pop_block(&mut self, max_size: usize) -> (Vec<(usize, T)>, Option<T>) {
         let mut block = Vec::new();
-        
-        // Extract up to max_size items
-        let iter = self.heap.iter().take(max_size);
-        let items_to_remove: Vec<(OrderedFloat<T>, usize)> = iter.cloned().collect();
-        
-        for (OrderedFloat(dist), vertex) in items_to_remove {
-            self.heap.remove(&(OrderedFloat(dist), vertex));
-            self.distances.remove(&vertex);
-            block.push((vertex, dist));
+
+        while block.len() < max_size && !self.blocks.is_empty() {
+            let take = (max_size - block.len()).min(self.blocks[0].entries.len());
+            let drained: Vec<(OrderedFloat<T>, usize)> =
+                self.blocks[0].entries.drain(0..take).collect();
+            for (OrderedFloat(dist), vertex) in drained {
+                self.locations.remove(&vertex);
+                block.push((vertex, dist));
+            }
+
+            if self.blocks[0].entries.is_empty() {
+                self.blocks.remove(0);
+                self.refresh_locations_from(0);
+            } else {
+                self.refresh_block_locations(0);
+            }
         }
-        
-        // Get next distance threshold (b_next)
-        let b_next = self.heap.iter().next().map(|(OrderedFloat(dist), _)| *dist);
-        
+
+        let b_next = self
+            .blocks
+            .first()
+            .and_then(|block| block.entries.first())
+            .map(|(OrderedFloat(dist), _)| *dist);
+
         (block, b_next)
     }
 
     /// Check if the heap is empty
     pub fn is_empty(&self) -> bool {
-        self.heap.is_empty()
+        self.blocks.is_empty()
     }
 
     /// Get the minimum distance in the heap (if any)
     pub fn min_distance(&self) -> Option<T> {
-        self.heap.iter().next().map(|(OrderedFloat(dist), _)| *dist)
+        self.blocks
+            .first()
+            .and_then(|block| block.entries.first())
+            .map(|(OrderedFloat(dist), _)| *dist)
+    }
+
+    fn remove_vertex(&mut self, vertex: usize) {
+        let Some(info) = self.locations.remove(&vertex) else {
+            return;
+        };
+        if info.block_index >= self.blocks.len() {
+            return;
+        }
+        let block = &mut self.blocks[info.block_index];
+        if info.entry_index < block.entries.len() {
+            block.entries.remove(info.entry_index);
+            if block.entries.is_empty() {
+                self.blocks.remove(info.block_index);
+                self.refresh_locations_from(info.block_index);
+            } else {
+                self.refresh_block_locations(info.block_index);
+            }
+        }
+    }
+
+    fn insert_vertex(&mut self, vertex: usize, distance: T) {
+        let entry = (OrderedFloat(distance), vertex);
+        if self.blocks.is_empty() {
+            self.blocks.push(Block { entries: vec![entry] });
+            self.locations.insert(
+                vertex,
+                EntryInfo {
+                    distance,
+                    block_index: 0,
+                    entry_index: 0,
+                },
+            );
+            return;
+        }
+
+        let target = OrderedFloat(distance);
+        let block_index = match self.blocks.binary_search_by(|block| {
+            block
+                .entries
+                .last()
+                .map(|(dist, _)| dist)
+                .unwrap()
+                .cmp(&target)
+        }) {
+            Ok(idx) | Err(idx) => idx,
+        };
+
+        let insert_block = block_index.min(self.blocks.len() - 1);
+
+        let should_split = {
+            let block = &mut self.blocks[insert_block];
+            let entry_pos = match block.entries.binary_search_by(|probe| probe.cmp(&entry)) {
+                Ok(pos) | Err(pos) => pos,
+            };
+            block.entries.insert(entry_pos, entry);
+            block.entries.len() > self.block_capacity
+        };
+        self.refresh_block_locations(insert_block);
+
+        if should_split {
+            let split_index = self.blocks[insert_block].entries.len() / 2;
+            let new_entries = self.blocks[insert_block].entries.split_off(split_index);
+            let new_block_index = insert_block + 1;
+            self.blocks.insert(new_block_index, Block { entries: new_entries });
+            self.refresh_locations_from(insert_block);
+        }
+    }
+
+    fn refresh_block_locations(&mut self, block_index: usize) {
+        if block_index >= self.blocks.len() {
+            return;
+        }
+        for (entry_index, (_, vertex)) in self.blocks[block_index].entries.iter().enumerate() {
+            let (OrderedFloat(distance), _) = self.blocks[block_index].entries[entry_index];
+            if let Some(info) = self.locations.get_mut(vertex) {
+                info.distance = distance;
+                info.block_index = block_index;
+                info.entry_index = entry_index;
+            } else {
+                self.locations.insert(
+                    *vertex,
+                    EntryInfo {
+                        distance,
+                        block_index,
+                        entry_index,
+                    },
+                );
+            }
+        }
+    }
+
+    fn refresh_locations_from(&mut self, start_index: usize) {
+        for index in start_index..self.blocks.len() {
+            self.refresh_block_locations(index);
+        }
     }
 }
 
