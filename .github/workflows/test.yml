@@ -37,6 +37,10 @@ jobs:
       working-directory: rust/bmssp-core
       run: cargo test --all-features
 
+    - name: Remove stale Python virtualenv
+      run: |
+        python -c "import pathlib, shutil; shutil.rmtree(pathlib.Path('python') / '.venv', ignore_errors=True)"
+
     - name: Build Python bindings
       working-directory: python
       run: maturin develop --manifest-path ../rust/bmssp-py/Cargo.toml --release
