@@ -184,6 +184,10 @@ pip install --index-url https://test.pypi.org/simple/ bmssp
 twine upload dist/*
 ```
 
+If the upload fails with "File already exists", the filename/version has already been published.
+In that case, either bump the package version and rebuild, or re-run the command with
+`--skip-existing` to upload only the missing files.
+
 4. **Verify installation from PyPI:**
 ```bash
 pip install bmssp
