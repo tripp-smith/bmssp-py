@@ -1,6 +1,6 @@
 """BMSSP: Fast single-source shortest paths for grid and pipeline networks."""
 
-from _bmssp import *  # noqa: F401,F403
+from _bmssp import *  # re-export extension API
 
 from .graph import Graph
 from .sssp import SSSPResult, multi_sink_costs, reconstruct_path, sssp
