@@ -1,5 +1,7 @@
 # API Reference
 
+For a step-by-step tutorial with examples, see the [Tutorial](tutorial.md).
+
 ## Core Types
 
 ### `bmssp.Graph`

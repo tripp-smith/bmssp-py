@@ -362,6 +362,12 @@ print(f"Ratio: {avg_recompute/time_initial:.2f}x")
 3. **Use enabled masks for outages**: Don't rebuild graphs for outages
 4. **Batch scenarios**: Process multiple scenarios with the same graph topology
 
+## Next Steps
+
+- Explore the [API Reference](api.md) for complete function documentation
+- Read the [Performance Guide](performance.md) for optimization tips
+- Check the [Algorithm Description](algorithm.md) for implementation details
+
 ## Troubleshooting
 
 ### Common Issues
