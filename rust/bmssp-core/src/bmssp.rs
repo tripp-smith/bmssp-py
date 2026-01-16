@@ -1,14 +1,188 @@
-use crate::csr::CsrGraph;
-use crate::params::BmsspParams;
 use crate::block_heap::FastBlockHeap;
+use crate::csr::CsrGraph;
 use crate::error::Result;
+use crate::params::BmsspParams;
 use num_traits::Float;
+
+#[cfg(feature = "simd")]
+use std::any::TypeId;
+
+#[cfg(feature = "parallel")]
+use rayon::prelude::*;
+
+#[cfg(feature = "simd")]
+use wide::{f32x4, f64x2};
 
 /// BMSSP algorithm implementation
 ///
 /// This implements the BMSSP (Blocked Multi-Source Shortest Path) algorithm
 /// using block-based processing. For correctness, we use a block-based
 /// Dijkstra-like approach that processes vertices in blocks.
+
+fn relax_edges<T>(
+    graph: &CsrGraph,
+    weights: &[T],
+    enabled: Option<&[bool]>,
+    u: usize,
+    dist: &mut [T],
+    pred: &mut [usize],
+    heap: &mut FastBlockHeap<T>,
+) where
+    T: Float + Copy,
+{
+    if enabled.is_none() {
+        #[cfg(feature = "simd")]
+        if try_relax_edges_simd(graph, weights, u, dist, pred, heap) {
+            return;
+        }
+    }
+
+    let (start, _end) = graph.edge_range(u);
+    for (eid, &v) in graph.neighbors(u).iter().enumerate() {
+        let edge_idx = start + eid;
+
+        if let Some(enabled_mask) = enabled {
+            if !enabled_mask[edge_idx] {
+                continue;
+            }
+        }
+
+        let w = weights[edge_idx];
+        let new_dist = dist[u] + w;
+
+        if new_dist < dist[v] {
+            dist[v] = new_dist;
+            pred[v] = u;
+            heap.push(v, new_dist);
+        }
+    }
+}
+
+#[cfg(feature = "simd")]
+fn try_relax_edges_simd<T>(
+    graph: &CsrGraph,
+    weights: &[T],
+    u: usize,
+    dist: &mut [T],
+    pred: &mut [usize],
+    heap: &mut FastBlockHeap<T>,
+) -> bool
+where
+    T: Float + Copy + 'static,
+{
+    if TypeId::of::<T>() == TypeId::of::<f32>() {
+        // SAFETY: Verified that T is f32 for this branch.
+        let weights_f32 = unsafe { &*(weights as *const [T] as *const [f32]) };
+        let dist_f32 = unsafe { &mut *(dist as *mut [T] as *mut [f32]) };
+        relax_edges_simd_f32(graph, weights_f32, u, dist_f32, pred, heap);
+        return true;
+    }
+
+    if TypeId::of::<T>() == TypeId::of::<f64>() {
+        // SAFETY: Verified that T is f64 for this branch.
+        let weights_f64 = unsafe { &*(weights as *const [T] as *const [f64]) };
+        let dist_f64 = unsafe { &mut *(dist as *mut [T] as *mut [f64]) };
+        relax_edges_simd_f64(graph, weights_f64, u, dist_f64, pred, heap);
+        return true;
+    }
+
+    false
+}
+
+#[cfg(feature = "simd")]
+fn relax_edges_simd_f32(
+    graph: &CsrGraph,
+    weights: &[f32],
+    u: usize,
+    dist: &mut [f32],
+    pred: &mut [usize],
+    heap: &mut FastBlockHeap<f32>,
+) {
+    let neighbors = graph.neighbors(u);
+    let (start, _end) = graph.edge_range(u);
+    let mut idx = 0;
+    let dist_u = dist[u];
+
+    while idx + 4 <= neighbors.len() {
+        let edge_idx = start + idx;
+        let w = f32x4::new(
+            weights[edge_idx],
+            weights[edge_idx + 1],
+            weights[edge_idx + 2],
+            weights[edge_idx + 3],
+        );
+        let new_dist = w + f32x4::splat(dist_u);
+        let new_vals = new_dist.to_array();
+
+        for lane in 0..4 {
+            let v = neighbors[idx + lane];
+            let candidate = new_vals[lane];
+            if candidate < dist[v] {
+                dist[v] = candidate;
+                pred[v] = u;
+                heap.push(v, candidate);
+            }
+        }
+
+        idx += 4;
+    }
+
+    for (eid, &v) in neighbors[idx..].iter().enumerate() {
+        let edge_idx = start + idx + eid;
+        let w = weights[edge_idx];
+        let new_dist = dist_u + w;
+        if new_dist < dist[v] {
+            dist[v] = new_dist;
+            pred[v] = u;
+            heap.push(v, new_dist);
+        }
+    }
+}
+
+#[cfg(feature = "simd")]
+fn relax_edges_simd_f64(
+    graph: &CsrGraph,
+    weights: &[f64],
+    u: usize,
+    dist: &mut [f64],
+    pred: &mut [usize],
+    heap: &mut FastBlockHeap<f64>,
+) {
+    let neighbors = graph.neighbors(u);
+    let (start, _end) = graph.edge_range(u);
+    let mut idx = 0;
+    let dist_u = dist[u];
+
+    while idx + 2 <= neighbors.len() {
+        let edge_idx = start + idx;
+        let w = f64x2::new(weights[edge_idx], weights[edge_idx + 1]);
+        let new_dist = w + f64x2::splat(dist_u);
+        let new_vals = new_dist.to_array();
+
+        for lane in 0..2 {
+            let v = neighbors[idx + lane];
+            let candidate = new_vals[lane];
+            if candidate < dist[v] {
+                dist[v] = candidate;
+                pred[v] = u;
+                heap.push(v, candidate);
+            }
+        }
+
+        idx += 2;
+    }
+
+    for (eid, &v) in neighbors[idx..].iter().enumerate() {
+        let edge_idx = start + idx + eid;
+        let w = weights[edge_idx];
+        let new_dist = dist_u + w;
+        if new_dist < dist[v] {
+            dist[v] = new_dist;
+            pred[v] = u;
+            heap.push(v, new_dist);
+        }
+    }
+}
 
 /// BMSSP algorithm for single-source shortest paths
 pub fn bmssp_sssp<T>(
@@ -18,7 +192,7 @@ pub fn bmssp_sssp<T>(
     enabled: Option<&[bool]>,
 ) -> Result<Vec<T>>
 where
-    T: Float + Copy,
+    T: Float + Copy + Sync,
 {
     let (dist, _) = bmssp_sssp_with_preds(graph, weights, source, enabled)?;
     Ok(dist)
@@ -36,7 +210,7 @@ pub fn bmssp_sssp_with_preds<T>(
     enabled: Option<&[bool]>,
 ) -> Result<(Vec<T>, Vec<usize>)>
 where
-    T: Float + Copy,
+    T: Float + Copy + Sync,
 {
     let n = graph.num_vertices();
     let mut dist = vec![T::infinity(); n];
@@ -93,33 +267,60 @@ where
         // Extract a block of up to k vertices
         let (block, _b_next) = heap.pop_block(params.k);
         
-        // Process each vertex in the block
-        for (u, d) in block {
-            // Skip if we've found a better path
-            if d > dist[u] {
-                continue;
-            }
-            
-            // Relax edges from u
-            let (start, end) = graph.edge_range(u);
-            for (eid, &v) in graph.neighbors(u).iter().enumerate() {
-                let edge_idx = start + eid;
-                
-                // Check if edge is enabled
-                if let Some(enabled_mask) = enabled {
-                    if !enabled_mask[edge_idx] {
-                        continue;
+        #[cfg(feature = "parallel")]
+        {
+            let dist_snapshot = &dist[..];
+            let candidates = block
+                .par_iter()
+                .fold(Vec::new, |mut acc, (u, d)| {
+                    if *d > dist_snapshot[*u] {
+                        return acc;
                     }
-                }
-                
-                let w = weights[edge_idx];
-                let new_dist = dist[u] + w;
-                
+
+                    let (start, _end) = graph.edge_range(*u);
+                    for (eid, &v) in graph.neighbors(*u).iter().enumerate() {
+                        let edge_idx = start + eid;
+
+                        if let Some(enabled_mask) = enabled {
+                            if !enabled_mask[edge_idx] {
+                                continue;
+                            }
+                        }
+
+                        let w = weights[edge_idx];
+                        let new_dist = dist_snapshot[*u] + w;
+
+                        if new_dist < dist_snapshot[v] {
+                            acc.push((v, new_dist, *u));
+                        }
+                    }
+
+                    acc
+                })
+                .reduce(Vec::new, |mut a, mut b| {
+                    a.append(&mut b);
+                    a
+                });
+
+            for (v, new_dist, u) in candidates {
                 if new_dist < dist[v] {
                     dist[v] = new_dist;
                     pred[v] = u;
                     heap.push(v, new_dist);
                 }
+            }
+        }
+
+        #[cfg(not(feature = "parallel"))]
+        {
+            // Process each vertex in the block
+            for (u, d) in block {
+                // Skip if we've found a better path
+                if d > dist[u] {
+                    continue;
+                }
+
+                relax_edges(graph, weights, enabled, u, &mut dist, &mut pred, &mut heap);
             }
         }
     }
@@ -194,7 +395,7 @@ pub fn bmssp_sssp_with_state<'a, T>(
     enabled: Option<&[bool]>,
 ) -> Result<&'a [T]>
 where
-    T: Float + Copy,
+    T: Float + Copy + Sync,
 {
     let (dist, _) = bmssp_sssp_with_preds_and_state(state, graph, weights, source, enabled)?;
     Ok(dist)
@@ -212,7 +413,7 @@ pub fn bmssp_sssp_with_preds_and_state<'a, T>(
     enabled: Option<&[bool]>,
 ) -> Result<(&'a [T], &'a [usize])>
 where
-    T: Float + Copy,
+    T: Float + Copy + Sync,
 {
     let n = graph.num_vertices();
     state.reset(n);
@@ -270,33 +471,60 @@ where
         // Extract a block of up to k vertices
         let (block, _b_next) = state.heap.pop_block(params.k);
         
-        // Process each vertex in the block
-        for (u, d) in block {
-            // Skip if we've found a better path
-            if d > dist[u] {
-                continue;
-            }
-            
-            // Relax edges from u
-            let (start, _end) = graph.edge_range(u);
-            for (eid, &v) in graph.neighbors(u).iter().enumerate() {
-                let edge_idx = start + eid;
-                
-                // Check if edge is enabled
-                if let Some(enabled_mask) = enabled {
-                    if !enabled_mask[edge_idx] {
-                        continue;
+        #[cfg(feature = "parallel")]
+        {
+            let dist_snapshot = &dist[..];
+            let candidates = block
+                .par_iter()
+                .fold(Vec::new, |mut acc, (u, d)| {
+                    if *d > dist_snapshot[*u] {
+                        return acc;
                     }
-                }
-                
-                let w = weights[edge_idx];
-                let new_dist = dist[u] + w;
-                
+
+                    let (start, _end) = graph.edge_range(*u);
+                    for (eid, &v) in graph.neighbors(*u).iter().enumerate() {
+                        let edge_idx = start + eid;
+
+                        if let Some(enabled_mask) = enabled {
+                            if !enabled_mask[edge_idx] {
+                                continue;
+                            }
+                        }
+
+                        let w = weights[edge_idx];
+                        let new_dist = dist_snapshot[*u] + w;
+
+                        if new_dist < dist_snapshot[v] {
+                            acc.push((v, new_dist, *u));
+                        }
+                    }
+
+                    acc
+                })
+                .reduce(Vec::new, |mut a, mut b| {
+                    a.append(&mut b);
+                    a
+                });
+
+            for (v, new_dist, u) in candidates {
                 if new_dist < dist[v] {
                     dist[v] = new_dist;
                     pred[v] = u;
                     state.heap.push(v, new_dist);
                 }
+            }
+        }
+
+        #[cfg(not(feature = "parallel"))]
+        {
+            // Process each vertex in the block
+            for (u, d) in block {
+                // Skip if we've found a better path
+                if d > dist[u] {
+                    continue;
+                }
+
+                relax_edges(graph, weights, enabled, u, dist, pred, &mut state.heap);
             }
         }
     }
@@ -518,5 +746,36 @@ mod tests {
         
         // Verify state is still usable
         assert!(state.distances().len() >= 2);
+    }
+
+    #[cfg(feature = "simd")]
+    #[test]
+    fn test_bmssp_simd_relaxation() {
+        let indptr = vec![0, 4, 4, 4, 4, 4];
+        let indices = vec![1, 2, 3, 4];
+        let graph = CsrGraph::new(5, indptr, indices).unwrap();
+        let weights = vec![1.0f32, 2.0f32, 3.0f32, 4.0f32];
+
+        let dist = bmssp_sssp(&graph, &weights, 0, None).unwrap();
+        assert_eq!(dist[0], 0.0);
+        assert_eq!(dist[1], 1.0);
+        assert_eq!(dist[2], 2.0);
+        assert_eq!(dist[3], 3.0);
+        assert_eq!(dist[4], 4.0);
+    }
+
+    #[cfg(feature = "parallel")]
+    #[test]
+    fn test_bmssp_parallel_relaxation() {
+        let indptr = vec![0, 2, 4, 6, 6];
+        let indices = vec![1, 2, 2, 3, 3, 0];
+        let graph = CsrGraph::new(4, indptr, indices).unwrap();
+        let weights = vec![1.0f32, 5.0f32, 1.0f32, 1.0f32, 1.0f32, 10.0f32];
+
+        let dist = bmssp_sssp(&graph, &weights, 0, None).unwrap();
+        assert_eq!(dist[0], 0.0);
+        assert_eq!(dist[1], 1.0);
+        assert_eq!(dist[2], 2.0);
+        assert_eq!(dist[3], 3.0);
     }
 }

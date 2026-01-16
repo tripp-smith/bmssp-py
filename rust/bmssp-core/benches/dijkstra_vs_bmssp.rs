@@ -72,5 +72,44 @@ fn bench_bmssp(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, bench_dijkstra, bench_bmssp);
-criterion_main!(benches);
+#[cfg(feature = "simd")]
+fn bench_bmssp_simd(c: &mut Criterion) {
+    let (graph, weights) = generate_random_graph(1000, 5000, 42);
+
+    c.bench_function("bmssp_simd_1000v_5000e", |b| {
+        b.iter(|| {
+            bmssp_sssp(black_box(&graph), black_box(&weights), black_box(0), black_box(None))
+        })
+    });
+}
+
+#[cfg(feature = "parallel")]
+fn bench_bmssp_parallel(c: &mut Criterion) {
+    let (graph, weights) = generate_random_graph(1000, 5000, 42);
+
+    c.bench_function("bmssp_parallel_1000v_5000e", |b| {
+        b.iter(|| {
+            bmssp_sssp(black_box(&graph), black_box(&weights), black_box(0), black_box(None))
+        })
+    });
+}
+
+criterion_group!(base_benches, bench_dijkstra, bench_bmssp);
+
+#[cfg(feature = "simd")]
+criterion_group!(simd_benches, bench_bmssp_simd);
+
+#[cfg(feature = "parallel")]
+criterion_group!(parallel_benches, bench_bmssp_parallel);
+
+#[cfg(all(feature = "simd", feature = "parallel"))]
+criterion_main!(base_benches, simd_benches, parallel_benches);
+
+#[cfg(all(feature = "simd", not(feature = "parallel")))]
+criterion_main!(base_benches, simd_benches);
+
+#[cfg(all(not(feature = "simd"), feature = "parallel"))]
+criterion_main!(base_benches, parallel_benches);
+
+#[cfg(all(not(feature = "simd"), not(feature = "parallel")))]
+criterion_main!(base_benches);
