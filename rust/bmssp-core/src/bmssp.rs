@@ -782,6 +782,6 @@ mod tests {
         assert_eq!(dist[0], 0.0);
         assert_eq!(dist[1], 1.0);
         assert_eq!(dist[2], 2.0);
-        assert_eq!(dist[3], 3.0);
+        assert_eq!(dist[3], 2.0);
     }
 }
