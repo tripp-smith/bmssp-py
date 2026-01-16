@@ -28,11 +28,13 @@ fn relax_edges<T>(
     pred: &mut [usize],
     heap: &mut FastBlockHeap<T>,
 ) where
-    T: Float + Copy,
+    T: Float + Copy + 'static,
 {
     if enabled.is_none() {
         #[cfg(feature = "simd")]
-        if try_relax_edges_simd(graph, weights, u, dist, pred, heap) {
+        if try_relax_edges_simd(graph, weights, u, dist, pred, |v, new_dist| {
+            heap.push(v, new_dist);
+        }) {
             return;
         }
     }
@@ -65,7 +67,7 @@ fn try_relax_edges_simd<T>(
     u: usize,
     dist: &mut [T],
     pred: &mut [usize],
-    heap: &mut FastBlockHeap<T>,
+    mut push: impl FnMut(usize, T),
 ) -> bool
 where
     T: Float + Copy + 'static,
@@ -74,7 +76,9 @@ where
         // SAFETY: Verified that T is f32 for this branch.
         let weights_f32 = unsafe { &*(weights as *const [T] as *const [f32]) };
         let dist_f32 = unsafe { &mut *(dist as *mut [T] as *mut [f32]) };
-        relax_edges_simd_f32(graph, weights_f32, u, dist_f32, pred, heap);
+        relax_edges_simd_f32(graph, weights_f32, u, dist_f32, pred, |v, new_dist| {
+            push(v, T::from(new_dist).unwrap());
+        });
         return true;
     }
 
@@ -82,7 +86,9 @@ where
         // SAFETY: Verified that T is f64 for this branch.
         let weights_f64 = unsafe { &*(weights as *const [T] as *const [f64]) };
         let dist_f64 = unsafe { &mut *(dist as *mut [T] as *mut [f64]) };
-        relax_edges_simd_f64(graph, weights_f64, u, dist_f64, pred, heap);
+        relax_edges_simd_f64(graph, weights_f64, u, dist_f64, pred, |v, new_dist| {
+            push(v, T::from(new_dist).unwrap());
+        });
         return true;
     }
 
@@ -96,7 +102,7 @@ fn relax_edges_simd_f32(
     u: usize,
     dist: &mut [f32],
     pred: &mut [usize],
-    heap: &mut FastBlockHeap<f32>,
+    mut push: impl FnMut(usize, f32),
 ) {
     let neighbors = graph.neighbors(u);
     let (start, _end) = graph.edge_range(u);
@@ -105,12 +111,12 @@ fn relax_edges_simd_f32(
 
     while idx + 4 <= neighbors.len() {
         let edge_idx = start + idx;
-        let w = f32x4::new(
+        let w = f32x4::new([
             weights[edge_idx],
             weights[edge_idx + 1],
             weights[edge_idx + 2],
             weights[edge_idx + 3],
-        );
+        ]);
         let new_dist = w + f32x4::splat(dist_u);
         let new_vals = new_dist.to_array();
 
@@ -120,7 +126,7 @@ fn relax_edges_simd_f32(
             if candidate < dist[v] {
                 dist[v] = candidate;
                 pred[v] = u;
-                heap.push(v, candidate);
+                push(v, candidate);
             }
         }
 
@@ -134,7 +140,7 @@ fn relax_edges_simd_f32(
         if new_dist < dist[v] {
             dist[v] = new_dist;
             pred[v] = u;
-            heap.push(v, new_dist);
+            push(v, new_dist);
         }
     }
 }
@@ -146,7 +152,7 @@ fn relax_edges_simd_f64(
     u: usize,
     dist: &mut [f64],
     pred: &mut [usize],
-    heap: &mut FastBlockHeap<f64>,
+    mut push: impl FnMut(usize, f64),
 ) {
     let neighbors = graph.neighbors(u);
     let (start, _end) = graph.edge_range(u);
@@ -155,7 +161,7 @@ fn relax_edges_simd_f64(
 
     while idx + 2 <= neighbors.len() {
         let edge_idx = start + idx;
-        let w = f64x2::new(weights[edge_idx], weights[edge_idx + 1]);
+        let w = f64x2::new([weights[edge_idx], weights[edge_idx + 1]]);
         let new_dist = w + f64x2::splat(dist_u);
         let new_vals = new_dist.to_array();
 
@@ -165,7 +171,7 @@ fn relax_edges_simd_f64(
             if candidate < dist[v] {
                 dist[v] = candidate;
                 pred[v] = u;
-                heap.push(v, candidate);
+                push(v, candidate);
             }
         }
 
@@ -179,7 +185,7 @@ fn relax_edges_simd_f64(
         if new_dist < dist[v] {
             dist[v] = new_dist;
             pred[v] = u;
-            heap.push(v, new_dist);
+            push(v, new_dist);
         }
     }
 }
@@ -192,7 +198,7 @@ pub fn bmssp_sssp<T>(
     enabled: Option<&[bool]>,
 ) -> Result<Vec<T>>
 where
-    T: Float + Copy + Sync,
+    T: Float + Copy + Send + Sync + 'static,
 {
     let (dist, _) = bmssp_sssp_with_preds(graph, weights, source, enabled)?;
     Ok(dist)
@@ -210,7 +216,7 @@ pub fn bmssp_sssp_with_preds<T>(
     enabled: Option<&[bool]>,
 ) -> Result<(Vec<T>, Vec<usize>)>
 where
-    T: Float + Copy + Sync,
+    T: Float + Copy + Send + Sync + 'static,
 {
     let n = graph.num_vertices();
     let mut dist = vec![T::infinity(); n];
@@ -297,7 +303,7 @@ where
 
                     acc
                 })
-                .reduce(Vec::new, |mut a, mut b| {
+                .reduce(Vec::new, |mut a: Vec<(usize, T, usize)>, mut b| {
                     a.append(&mut b);
                     a
                 });
@@ -395,7 +401,7 @@ pub fn bmssp_sssp_with_state<'a, T>(
     enabled: Option<&[bool]>,
 ) -> Result<&'a [T]>
 where
-    T: Float + Copy + Sync,
+    T: Float + Copy + Send + Sync + 'static,
 {
     let (dist, _) = bmssp_sssp_with_preds_and_state(state, graph, weights, source, enabled)?;
     Ok(dist)
@@ -413,7 +419,7 @@ pub fn bmssp_sssp_with_preds_and_state<'a, T>(
     enabled: Option<&[bool]>,
 ) -> Result<(&'a [T], &'a [usize])>
 where
-    T: Float + Copy + Sync,
+    T: Float + Copy + Send + Sync + 'static,
 {
     let n = graph.num_vertices();
     state.reset(n);
@@ -501,7 +507,7 @@ where
 
                     acc
                 })
-                .reduce(Vec::new, |mut a, mut b| {
+                .reduce(Vec::new, |mut a: Vec<(usize, T, usize)>, mut b| {
                     a.append(&mut b);
                     a
                 });
